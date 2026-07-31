@@ -244,7 +244,7 @@ data-agent/
 ### 6.1 环境要求
 
 - Python 3.10+
-- DeepSeek API Key（[申请地址](https://platform.deepseek.com/)）
+- You API Key（[申请地址](https://platform.deepseek.com/)）
 - （可选）MySQL / PostgreSQL / ClickHouse 用于连接外部数据库
 
 ### 6.2 安装步骤
