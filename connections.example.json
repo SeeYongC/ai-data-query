@@ -1,0 +1,27 @@
+﻿{
+  "connections": [
+    {
+      "id": "1",
+      "name": "电商数据库 (SQLite)",
+      "dialect": "sqlite",
+      "host": "localhost",
+      "port": 0,
+      "user": "",
+      "password": "",
+      "database": "data/ecommerce.db",
+      "url": "sqlite:///data/ecommerce.db"
+    },
+    {
+      "id": "2",
+      "name": "MySQL 示例",
+      "dialect": "mysql",
+      "host": "localhost",
+      "port": 3306,
+      "user": "root",
+      "password": "YOUR_PASSWORD",
+      "database": "YOUR_DATABASE",
+      "url": "mysql+pymysql://root:YOUR_PASSWORD@localhost:3306/YOUR_DATABASE"
+    }
+  ],
+  "active_ids": ["1"]
+}

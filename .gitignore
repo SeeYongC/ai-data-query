@@ -1,0 +1,31 @@
+﻿# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Database files (real data)
+*.db
+!data/ecommerce.db
+!data/test_shop.db
+
+# Config with real passwords
+connections.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temp scripts
+_fix*.py
+_gen*.py
+_clean*.py
