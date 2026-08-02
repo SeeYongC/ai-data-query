@@ -262,6 +262,7 @@ venv\Scripts\activate
 source venv/bin/activate
 
 # 3. 安装依赖
+cd ai-data-query
 pip install -r requirements.txt
 
 # 4. （可选）重新生成模拟数据
