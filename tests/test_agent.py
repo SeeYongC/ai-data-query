@@ -124,6 +124,29 @@ def test_read_only_rejects_empty(agent):
     assert agent._is_read_only("   ") is False
 
 
+def test_read_only_accepts_replace_function(agent):
+    """REPLACE() is a read-only string function; must not be mistaken for REPLACE INTO."""
+    assert agent._is_read_only("SELECT REPLACE(name, 'a', 'b') FROM orders") is True
+    assert agent._is_read_only("SELECT replace(name,'x','y') AS clean FROM orders") is True
+
+
+def test_read_only_accepts_merge_table_function(agent):
+    """ClickHouse merge() is a read-only table function; must not be mistaken for MERGE INTO."""
+    assert agent._is_read_only("SELECT * FROM merge('db', '^t')") is True
+
+
+def test_read_only_rejects_replace_into(agent):
+    """REPLACE INTO is a MySQL write statement and must still be blocked."""
+    assert agent._is_read_only("REPLACE INTO orders VALUES (1)") is False
+    assert agent._is_read_only("WITH x AS (SELECT 1) REPLACE INTO orders SELECT * FROM x") is False
+
+
+def test_read_only_rejects_merge_into(agent):
+    assert agent._is_read_only(
+        "MERGE INTO orders USING src ON 1=1 WHEN MATCHED THEN UPDATE SET total=0"
+    ) is False
+
+
 def test_execute_readonly_blocks_write(agent):
     with pytest.raises(ValueError):
         agent._execute_readonly(agent.db, "DELETE FROM orders")
