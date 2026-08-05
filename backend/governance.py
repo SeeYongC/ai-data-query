@@ -81,7 +81,8 @@ class Governance:
     def resolve(self, metric_key: str, definition_id: int) -> dict | None:
         try:
             columns, rows = self.db.execute(
-                f"SELECT * FROM metric_definitions WHERE metric_key='{metric_key}' AND definition_id={definition_id} AND is_active=1"
+                "SELECT * FROM metric_definitions WHERE metric_key=:mk AND definition_id=:did AND is_active=1",
+                {"mk": metric_key, "did": definition_id},
             )
             if rows:
                 return dict(zip(columns, rows[0]))
@@ -93,11 +94,13 @@ class Governance:
         try:
             if self._dialect == "mysql":
                 self.db.execute_dml(
-                    f"REPLACE INTO user_metric_preferences (user_identifier, metric_key, definition_id, last_used_at) VALUES ('{user_id}', '{metric_key}', {definition_id}, NOW())"
+                    "REPLACE INTO user_metric_preferences (user_identifier, metric_key, definition_id, last_used_at) VALUES (:uid, :mk, :did, NOW())",
+                    {"uid": user_id, "mk": metric_key, "did": definition_id},
                 )
             else:
                 self.db.execute_dml(
-                    f"INSERT OR REPLACE INTO user_metric_preferences (user_identifier, metric_key, definition_id, last_used_at) VALUES ('{user_id}', '{metric_key}', {definition_id}, CURRENT_TIMESTAMP)"
+                    "INSERT OR REPLACE INTO user_metric_preferences (user_identifier, metric_key, definition_id, last_used_at) VALUES (:uid, :mk, :did, CURRENT_TIMESTAMP)",
+                    {"uid": user_id, "mk": metric_key, "did": definition_id},
                 )
         except Exception:
             pass
@@ -105,7 +108,8 @@ class Governance:
     def get_preferences(self, user_id: str) -> dict[str, int]:
         try:
             columns, rows = self.db.execute(
-                f"SELECT metric_key, definition_id FROM user_metric_preferences WHERE user_identifier='{user_id}'"
+                "SELECT metric_key, definition_id FROM user_metric_preferences WHERE user_identifier=:uid",
+                {"uid": user_id},
             )
             return {r[columns.index("metric_key")]: r[columns.index("definition_id")] for r in rows}
         except Exception:
@@ -118,7 +122,8 @@ class Governance:
         for metric_key, def_id in selections.items():
             try:
                 columns, rows = self.db.execute(
-                    f"SELECT * FROM metric_definitions WHERE metric_key='{metric_key}' AND definition_id={def_id} AND is_active=1"
+                    "SELECT * FROM metric_definitions WHERE metric_key=:mk AND definition_id=:did AND is_active=1",
+                    {"mk": metric_key, "did": def_id},
                 )
                 if rows:
                     r = dict(zip(columns, rows[0]))

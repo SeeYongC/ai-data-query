@@ -264,6 +264,8 @@ source venv/bin/activate
 # 3. 安装依赖
 cd ai-data-query
 pip install -r requirements.txt
+# （可选）开发/测试依赖
+pip install -r requirements-dev.txt
 
 # 4. （可选）重新生成模拟数据
 python scripts/generate_mock_data.py
@@ -273,7 +275,6 @@ python scripts/seed_metrics.py
 ```
 
 ### 6.3 启动服务
-
 ```bash
 # Windows PowerShell:
 $env:DEEPSEEK_API_KEY="sk-your-api-key"
@@ -313,7 +314,15 @@ pip install pymysql
 }
 ```
 
-### 6.5 常见问题
+### 6.5 运行单元测试
+
+```bash
+python -m pytest tests -v
+```
+
+测试覆盖数据库适配层（`database.py`）、口径治理（`governance.py`）、连接管理（`config_manager.py`）以及 Agent 的表名校验与响应解析（`agent.py`），不依赖真实 LLM 与外部数据库。
+
+### 6.6 常见问题
 
 **Q: 启动后页面打开，但左侧 Schema 面板为空？**
 

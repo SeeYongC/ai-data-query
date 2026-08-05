@@ -39,6 +39,40 @@ class Agent:
         if self.all_dbs: return list(self.all_dbs.values())[0]
         return self.db
 
+    READ_WRITE_KW = ("insert", "update", "delete", "drop", "alter", "create",
+                     "replace", "truncate", "merge", "grant", "revoke", "into")
+
+    @staticmethod
+    def _strip_literals(s: str) -> str:
+        """Remove string literals and comments so write-keyword scanning ignores them."""
+        return re.sub(r"'[^']*'|\"[^\"]*\"|--[^\n]*|/\*.*?\*/", "", s, flags=re.DOTALL)
+
+    def _is_read_only(self, sql: str) -> bool:
+        """Allow only read-only statements (SELECT / WITH ... SELECT)."""
+        s = sql.strip().lstrip("(").lstrip()
+        if not s:
+            return False
+        stripped = self._strip_literals(s)
+        # Reject multi-statement input (semicolons inside string literals are already removed).
+        body = stripped.rstrip()
+        if body.endswith(";"):
+            body = body[:-1]
+        if ";" in body:
+            return False
+        first = s.split(None, 1)[0].lower().rstrip(";")
+        if first == "select":
+            return not any(re.search(r"\b" + k + r"\b", stripped, re.IGNORECASE) for k in self.READ_WRITE_KW)
+        if first == "with":
+            # WITH x AS (...) SELECT ... is read-only; CTE write statements are not.
+            return not any(re.search(r"\b" + k + r"\b", stripped[4:], re.IGNORECASE) for k in self.READ_WRITE_KW)
+        return False
+
+    def _execute_readonly(self, db, sql):
+        """Execute SQL only if it is read-only (SELECT/WITH), else raise."""
+        if not self._is_read_only(sql):
+            raise ValueError("仅支持只读查询（SELECT / WITH ... SELECT），已拒绝写操作")
+        return db.execute(sql)
+
     def _build_prompt(self, metric_ctx="", db_name=None):
         dbs = {db_name: self.all_dbs[db_name]} if db_name and db_name in self.all_dbs else self.all_dbs
         parts = []
@@ -54,6 +88,27 @@ class Agent:
         extra = "\n\n" + metric_ctx if metric_ctx else ""
         return TEMPLATE.replace("{ALL_SCHEMAS}", "\n\n".join(parts)).replace("{EXTRA}", extra)
 
+    @staticmethod
+    def _split_refs(refs: str) -> list[str]:
+        """Split comma-separated table refs, ignoring commas inside quoted identifiers."""
+        parts, cur, q = [], "", None
+        for ch in refs:
+            if q:
+                cur += ch
+                if ch == q:
+                    q = None
+            elif ch in ('"', "'", "`"):
+                q = ch
+                cur += ch
+            elif ch == ",":
+                parts.append(cur)
+                cur = ""
+            else:
+                cur += ch
+        if cur.strip():
+            parts.append(cur)
+        return parts
+
     def _validate_sql_tables(self, sql, db):
         try:
             real = set(t.lower() for t in db.inspector.get_table_names())
@@ -63,11 +118,27 @@ class Agent:
                   "strftime","interval","round","asc","desc","if","nullif","datetime","extract","year","month","day",
                   "hour","substr","replace","trim","upper","lower","length","into","values","set","update","delete",
                   "insert","create","table","drop","alter","index"}
-            tokens = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]*", sql)
-            for i, t in enumerate(tokens):
-                if t.lower() in ("from", "join") and i + 1 < len(tokens):
-                    tbl = tokens[i + 1]
-                    if tbl and tbl.lower() not in real and tbl.lower() not in kw and not tbl.isdigit():
+            # Match the table reference list right after FROM/JOIN, up to the next clause keyword,
+            # a closing paren (subquery) or end of string. Handles "FROM t1, t2", "FROM schema.table",
+            # quoted identifiers and aliases, while skipping subqueries like "FROM (SELECT ...)".
+            pattern = re.compile(
+                r"\b(?:FROM|JOIN)\s+(?P<refs>[^();]+?)"
+                r"(?=\s+(?:WHERE|GROUP|ORDER|LIMIT|HAVING|ON|UNION|SET|VALUES|RETURNING|INNER|LEFT|RIGHT|FULL|CROSS|OUTER|FROM|JOIN)\b|\)|$)",
+                re.IGNORECASE | re.DOTALL,
+            )
+            for m in pattern.finditer(sql):
+                refs = m.group("refs")
+                for part in self._split_refs(refs):
+                    # Strip schema prefix and alias; keep quoted identifiers whole (may contain spaces, dots, commas).
+                    name = part.strip()
+                    if not name:
+                        continue
+                    if name[:1] in ('"', "'", "`"):
+                        q = name[0]
+                        tbl = name[1:name.rfind(q)] if q in name[1:] else name.strip(q)
+                    else:
+                        tbl = name.split(".")[-1].split()[0]
+                    if tbl.lower() not in real and tbl.lower() not in kw and not tbl.isdigit():
                         return "Table '%s' does not exist. Available tables: %s" % (tbl, ", ".join(sorted(real)))
             return None
         except Exception:
@@ -122,7 +193,7 @@ class Agent:
             if s2: sql, expl = s2, e2 or expl
 
         try:
-            cols, rows = tdb.execute(sql)
+            cols, rows = self._execute_readonly(tdb, sql)
             return {"success": True, "sql": sql, "explanation": expl, "columns": cols, "rows": rows, "row_count": len(rows), "retried": False}
         except Exception as e:
             tbl_list = "unknown"
@@ -134,7 +205,7 @@ class Agent:
             s3, e3 = self._parse(raw3)
             if s3 is None: s3, e3 = sql, expl
             try:
-                cols, rows = tdb.execute(s3)
+                cols, rows = self._execute_readonly(tdb, s3)
                 return {"success": True, "sql": s3, "explanation": e3 or expl, "columns": cols, "rows": rows, "row_count": len(rows), "retried": True, "first_error": str(e)}
             except Exception as e2:
                 return {"success": False, "sql": s3, "explanation": e3 or expl, "error": str(e2), "first_error": str(e)}
@@ -161,8 +232,14 @@ class Agent:
                 d = json.loads(m.group(0))
                 if "sql" in d: return d.get("sql", ""), d.get("explanation", "")
             except: continue
-        sm = re.search(r'"sql"\s*:\s*"(.*?)"', text, re.DOTALL)
+        sm = re.search(r'"sql"\s*:\s*"(.*?)(?<!\\)"(?=\s*(?:[,}]|"|$))', text, re.DOTALL)
         if sm:
-            em = re.search(r'"explanation"\s*:\s*"(.*?)"', text, re.DOTALL)
-            return sm.group(1), em.group(1) if em else ""
+            em = re.search(r'"explanation"\s*:\s*"(.*?)(?<!\\)"', text, re.DOTALL)
+            sql = sm.group(1)
+            try: sql = json.loads('"' + sql + '"')
+            except Exception: pass
+            expl = em.group(1) if em else ""
+            try: expl = json.loads('"' + expl + '"')
+            except Exception: pass
+            return sql, expl
         return None, text[:300]

@@ -1,5 +1,5 @@
 ﻿"""FastAPI backend for DataAgent - production ready."""
-import os, sys
+import json, os, sys
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,6 +24,7 @@ FRONTEND_PATH = BASE_DIR / "frontend" / "index.html"
 DB_PATH = str(BASE_DIR / "data" / "ecommerce.db")
 
 _databases = {}
+_config_signature = None
 agent: Agent | None = None
 governance: Governance | None = None
 
@@ -48,9 +49,20 @@ class ConnectionRequest(BaseModel):
     name: str = ""; conn_id: str = ""; enable: bool = True
 
 
-def _ensure_db():
-    """Load databases from connections.json. Auto-add primary ecommerce.db if empty."""
-    global _databases
+def _ensure_db(force: bool = False):
+    """Load databases from connections.json. Auto-add primary ecommerce.db if empty.
+
+    Rebuilds only when the config signature changed (or force=True), so per-request
+    calls reuse the existing engines instead of disposing and recreating them.
+    """
+    global _databases, _config_signature
+    if not force:
+        current = json.dumps(load_config(), sort_keys=True, ensure_ascii=False)
+        if current == _config_signature and _databases:
+            return
+    for db in _databases.values():
+        try: db.close()
+        except Exception: pass
     _databases.clear()
     
     # Auto-add primary database if connections.json is empty
@@ -65,6 +77,7 @@ def _ensure_db():
             _databases[label] = Database(c["url"])
         except Exception as e:
             print(f"  FAILED: {label} - {e}")
+    _config_signature = json.dumps(load_config(), sort_keys=True, ensure_ascii=False)
 
 
 def _ensure_agent():
@@ -101,7 +114,7 @@ async def api_test_connection(req: ConnectionRequest):
 async def api_add_connection(req: ConnectionRequest):
     try:
         conn = add_connection(req.dialect, req.host, req.port, req.user, req.password, req.database, req.name)
-        _ensure_db()
+        _ensure_db(force=True)
         return {"success": True, "connection": conn}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -110,7 +123,7 @@ async def api_add_connection(req: ConnectionRequest):
 async def api_remove_connection(conn_id: str):
     try:
         remove_connection(conn_id)
-        _ensure_db()
+        _ensure_db(force=True)
         # Also clear agent to force re-init with remaining connections
         global agent; agent = None
         return {"success": True}
@@ -121,7 +134,7 @@ async def api_remove_connection(conn_id: str):
 async def api_toggle_connection(req: ConnectionRequest):
     try:
         toggle_connection(req.conn_id, req.enable)
-        _ensure_db()
+        _ensure_db(force=True)
         global agent; agent = None
         return {"success": True, "active_count": len(_databases)}
     except Exception as e:
@@ -135,6 +148,7 @@ async def api_current():
 @app.post("/api/refresh")
 async def api_refresh():
     global agent; agent = None
+    _ensure_db(force=True)
     _ensure_agent()
     return {"success": True, "databases": len(_databases)}
 

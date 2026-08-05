@@ -56,7 +56,9 @@ def list_connections() -> list[dict]:
 
 def add_connection(dialect: str, host: str, port: int, user: str, password: str, database: str, name: str = "") -> dict:
     config = load_config()
-    conn_id = str(len(config["connections"]) + 1)
+    # Generate a unique id even after deletions (len+1 could collide with an existing id).
+    ids = [int(c["id"]) for c in config.get("connections", []) if str(c.get("id", "")).isdigit()]
+    conn_id = str(max(ids) + 1) if ids else "1"
     if dialect == 'sqlite':
         BASE = Path(__file__).resolve().parent.parent; database = str(BASE / "data" / database) if not os.path.isabs(database) else database; database = os.path.abspath(database).replace(chr(92), chr(47))
     url = build_url(dialect, host, port, user, password, database)

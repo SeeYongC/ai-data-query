@@ -96,10 +96,10 @@ class Database:
             lines.append("")
         return "\n".join(lines)
 
-    def execute(self, sql: str) -> tuple[list[str], list]:
+    def execute(self, sql: str, params: Optional[dict] = None) -> tuple[list[str], list]:
         """Execute a query; returns (column_names, rows). Handles both SELECT and DDL."""
         with self.engine.connect() as conn:
-            result = conn.execute(text(sql))
+            result = conn.execute(text(sql), params or {})
             if result.returns_rows:
                 columns = list(result.keys())
                 rows = [list(row) for row in result.fetchall()]
