@@ -40,12 +40,26 @@ class Agent:
         return self.db
 
     READ_WRITE_KW = ("insert", "update", "delete", "drop", "alter", "create",
-                     "replace", "truncate", "merge", "grant", "revoke", "into")
+                     "truncate", "grant", "revoke", "into")
 
     @staticmethod
     def _strip_literals(s: str) -> str:
         """Remove string literals and comments so write-keyword scanning ignores them."""
         return re.sub(r"'[^']*'|\"[^\"]*\"|--[^\n]*|/\*.*?\*/", "", s, flags=re.DOTALL)
+
+    @staticmethod
+    def _has_write_keyword(s: str) -> bool:
+        """Scan s (with literals stripped) for write keywords.
+
+        REPLACE/MERGE only count when followed by INTO: REPLACE(...) is a read-only
+        string function (SQLite/PostgreSQL/MySQL) and ClickHouse's merge(...) is a
+        read-only table function, while REPLACE INTO / MERGE INTO are write statements.
+        Standalone REPLACE/MERGE statements are already rejected by the statement-first
+        check in _is_read_only.
+        """
+        if any(re.search(r"\b" + k + r"\b", s, re.IGNORECASE) for k in Agent.READ_WRITE_KW):
+            return True
+        return bool(re.search(r"\b(?:replace|merge)\s+into\b", s, re.IGNORECASE))
 
     def _is_read_only(self, sql: str) -> bool:
         """Allow only read-only statements (SELECT / WITH ... SELECT)."""
@@ -61,10 +75,10 @@ class Agent:
             return False
         first = s.split(None, 1)[0].lower().rstrip(";")
         if first == "select":
-            return not any(re.search(r"\b" + k + r"\b", stripped, re.IGNORECASE) for k in self.READ_WRITE_KW)
+            return not self._has_write_keyword(stripped)
         if first == "with":
             # WITH x AS (...) SELECT ... is read-only; CTE write statements are not.
-            return not any(re.search(r"\b" + k + r"\b", stripped[4:], re.IGNORECASE) for k in self.READ_WRITE_KW)
+            return not self._has_write_keyword(stripped[4:])
         return False
 
     def _execute_readonly(self, db, sql):
