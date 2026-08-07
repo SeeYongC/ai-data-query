@@ -98,7 +98,24 @@
 
 ## 🚀 快速开始
 
-### 环境要求
+### 使用 Docker 运行(推荐)
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/SeeYongC/ai-data-query.git
+cd ai-data-query
+
+# 2. 配置 API Key(二选一),写入 .env 文件
+echo "DEEPSEEK_API_KEY=sk-your-api-key" > .env
+# 或:echo "OPENAI_API_KEY=sk-your-api-key" > .env
+
+# 3. 构建并启动
+docker compose up -d --build
+```
+
+启动后浏览器访问 **http://localhost:8000**。SQLite 数据库通过 volume 持久化,重启容器数据不丢失。
+
+### 环境要求(本地开发)
 
 - Python 3.10+
 - DeepSeek 或 OpenAI 的 API Key([申请地址](https://platform.deepseek.com/))

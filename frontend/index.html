@@ -144,6 +144,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 function toggleTheme(){var b=document.body,btn=document.getElementById("themeBtn"),isDark=!b.classList.contains("warm");b.classList.toggle("warm");btn.textContent=isDark?"☾ 暗黑":"☀ 暖色调";localStorage.setItem("theme",isDark?"warm":"dark");}
 (function(){var t=localStorage.getItem("theme");if(t==="warm"){document.body.classList.add("warm");document.getElementById("themeBtn").textContent="☾ 暗黑";}})();
 var API="/api",charts={},pending={},selDb=null;
+function sessionId(){var s=localStorage.getItem("session_id");if(!s){s=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():"S"+Date.now().toString(36)+Math.random().toString(36).slice(2);localStorage.setItem("session_id",s);}return s;}
 function escH(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}
 function escA(s){return s.replace(/'/g,"\\'").replace(/"/g,"&quot;");}
 function init(){document.getElementById("examples").innerHTML=["这个数据库有哪些表？","各表分别有多少行数据？","上月销售额最高的品类？","各年龄段消费能力对比"].map(function(q){return '<button onclick="askEx(\''+escA(q)+'\')">'+escH(q)+"</button>";}).join("");document.getElementById("qInput").addEventListener("keydown",function(e){if(e.key==="Enter")ask();});loadConns();}
@@ -174,7 +175,7 @@ async function ask(selections,dbParam){
  chat.insertAdjacentHTML("beforeend",'<div class="load" id="'+lid+'"><span class="spin"></span> AI 分析中...</div>');
  chat.scrollTop=chat.scrollHeight;
  try{
-  var body={question:q};
+  var body={question:q,session_id:sessionId()};
   if(selections){body.metric_selections={};for(var k in selections){if(k[0]!=="_") body.metric_selections[k]=selections[k];}}
   if(dbParam) body.selected_database=dbParam;
   var r=await fetch(API+"/query",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),d=await r.json();

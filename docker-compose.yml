@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    container_name: ai-data-query
+    ports:
+      - "8000:8000"
+    environment:
+      # 在 .env 文件中配置，或直接在此填入
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      # SQLite 数据库持久化（含 connections 自动重建的默认库）
+      - data:/app/data
+    restart: unless-stopped
+
+volumes:
+  data:

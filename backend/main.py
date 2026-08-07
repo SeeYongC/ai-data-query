@@ -1,5 +1,6 @@
 ﻿"""FastAPI backend for DataAgent - production ready."""
-import json, os, sys
+import json, os, sys, uuid
+from collections import OrderedDict
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,11 +29,34 @@ _config_signature = None
 agent: Agent | None = None
 governance: Governance | None = None
 
+# ---- 会话记忆（进程内，重启丢失；demo 级实现） ----
+SESSIONS: OrderedDict[str, list] = OrderedDict()
+MAX_SESSIONS = 100          # 最多保留的会话数
+MAX_HISTORY = 12            # 每个会话保留的消息数（约 6 轮问答）
+
+
+def _get_history(session_id: str | None) -> list:
+    if not session_id:
+        return []
+    return list(SESSIONS.get(session_id, []))
+
+
+def _push_history(session_id: str | None, entries: list):
+    if not session_id or not entries:
+        return
+    history = SESSIONS.get(session_id, [])
+    history.extend(entries)
+    SESSIONS[session_id] = history[-MAX_HISTORY:]
+    SESSIONS.move_to_end(session_id)
+    while len(SESSIONS) > MAX_SESSIONS:
+        SESSIONS.popitem(last=False)
+
 
 class QueryRequest(BaseModel):
     question: str
     metric_selections: dict[str, int] | None = None
     selected_database: str | None = None
+    session_id: str | None = None
 
 class QueryResponse(BaseModel):
     success: bool; sql: str | None = None; explanation: str | None = None
@@ -42,6 +66,7 @@ class QueryResponse(BaseModel):
     metric_conflict: bool | None = None; conflicts: list[dict] | None = None
     question: str | None = None; raw_response: str | None = None
     database_select: bool | None = None; databases: list[dict] | None = None
+    session_id: str | None = None
 
 class ConnectionRequest(BaseModel):
     dialect: str = "mysql"; host: str = "localhost"; port: int = 3306
@@ -169,8 +194,22 @@ async def schema():
 async def query(req: QueryRequest):
     try:
         _ensure_agent()
-        result = await agent.query(req.question, req.metric_selections, req.selected_database)
-        return QueryResponse(**result)
+        session_id = req.session_id or str(uuid.uuid4())
+        history = _get_history(session_id)
+        result = await agent.query(req.question, req.metric_selections,
+                                   req.selected_database, history=history)
+        # 记录对话历史：跳过口径冲突 / 多库选择等中间流程
+        if not result.get("metric_conflict") and not result.get("database_select"):
+            asst = "SQL: %s" % result.get("sql", "") if result.get("sql") else ""
+            if result.get("explanation"):
+                asst = (asst + "\n" if asst else "") + result["explanation"]
+            if result.get("error"):
+                asst = (asst + "\n" if asst else "") + "Error: " + result["error"]
+            _push_history(session_id, [
+                {"role": "user", "content": req.question},
+                {"role": "assistant", "content": asst or "(no answer)"},
+            ])
+        return QueryResponse(**result, session_id=session_id)
     except HTTPException: raise
     except Exception as e: return QueryResponse(success=False, error=str(e))
 
