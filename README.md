@@ -8,10 +8,10 @@
 > **语义理解 → SQL 生成 → 数据库查询 → 可视化呈现** 的完整链路,并内置独创的 **口径治理(Metric Governance)** 能力。
 
 <!-- GitHub 徽章 -->
-![GitHub stars](https://img.shields.io/github/stars/Siborne/ai-data-query?style=for-the-badge&color=8250df)
-![GitHub forks](https://img.shields.io/github/forks/Siborne/ai-data-query?style=for-the-badge&color=8250df)
-![GitHub issues](https://img.shields.io/github/issues/Siborne/ai-data-query?style=for-the-badge&color=8250df)
-![GitHub license](https://img.shields.io/github/license/Siborne/ai-data-query?style=for-the-badge&color=8250df)
+![GitHub stars](https://img.shields.io/github/stars/SeeYongC/ai-data-query?style=for-the-badge&color=8250df)
+![GitHub forks](https://img.shields.io/github/forks/SeeYongC/ai-data-query?style=for-the-badge&color=8250df)
+![GitHub issues](https://img.shields.io/github/issues/SeeYongC/ai-data-query?style=for-the-badge&color=8250df)
+![GitHub license](https://img.shields.io/github/license/SeeYongC/ai-data-query?style=for-the-badge&color=8250df)
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
@@ -108,7 +108,7 @@
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/Siborne/ai-data-query.git
+git clone https://github.com/SeeYongC/ai-data-query.git
 cd ai-data-query
 
 # 2. 创建并激活虚拟环境(推荐)
