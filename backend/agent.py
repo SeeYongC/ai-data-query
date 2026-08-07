@@ -9,11 +9,16 @@ TEMPLATE = """You are an expert SQL analyst. Use ONLY the tables and columns lis
 
 {ALL_SCHEMAS}
 
+## CONVERSATION HISTORY (context only; answer the latest user question)
+
+{HISTORY}
+
 ## RULES
 
 1. ONLY use table/column names from above. If not listed, it does NOT exist.
 2. For percentages multiply by 100.0 after division. Use ROUND(val,2) for money.
 3. Limit to 50 rows max unless asked for more.
+4. Use the conversation history to resolve references like "上面的表", "和刚才一样" or follow-up questions.
 {EXTRA}
 
 ## OUTPUT
@@ -87,7 +92,20 @@ class Agent:
             raise ValueError("仅支持只读查询（SELECT / WITH ... SELECT），已拒绝写操作")
         return db.execute(sql)
 
-    def _build_prompt(self, metric_ctx="", db_name=None):
+    @staticmethod
+    def _fmt_history(history=None) -> str:
+        """Format conversation history for prompt injection."""
+        if not history:
+            return "(no prior conversation)"
+        lines = []
+        for h in history:
+            role = "User" if (h or {}).get("role") == "user" else "Assistant"
+            content = (h or {}).get("content", "").strip()
+            if content:
+                lines.append(f"{role}: {content}")
+        return "\n".join(lines) if lines else "(no prior conversation)"
+
+    def _build_prompt(self, metric_ctx="", db_name=None, history=None):
         dbs = {db_name: self.all_dbs[db_name]} if db_name and db_name in self.all_dbs else self.all_dbs
         parts = []
         for name, db in dbs.items():
@@ -100,7 +118,9 @@ class Agent:
         if not parts:
             parts.append("### default\n```sql\n%s\n```" % self.db.get_schema())
         extra = "\n\n" + metric_ctx if metric_ctx else ""
-        return TEMPLATE.replace("{ALL_SCHEMAS}", "\n\n".join(parts)).replace("{EXTRA}", extra)
+        return TEMPLATE.replace("{ALL_SCHEMAS}", "\n\n".join(parts)) \
+                       .replace("{HISTORY}", self._fmt_history(history)) \
+                       .replace("{EXTRA}", extra)
 
     @staticmethod
     def _split_refs(refs: str) -> list[str]:
@@ -158,7 +178,7 @@ class Agent:
         except Exception:
             return None
 
-    async def query(self, question, metric_selections=None, selected_database=None):
+    async def query(self, question, metric_selections=None, selected_database=None, history=None):
         mc = ""
         if metric_selections and self.governance:
             mc = self.governance.inject_context(metric_selections)
@@ -190,7 +210,7 @@ class Agent:
                         infos.append({"name": n, "table_count": 0, "tables": []})
                 return {"success": False, "database_select": True, "databases": infos, "question": question, "sql": "", "explanation": ""}
 
-        prompt = self._build_prompt(mc, selected_database)
+        prompt = self._build_prompt(mc, selected_database, history)
         raw = await self._call_llm(question, prompt)
         sql, expl = self._parse(raw)
         if sql is None:

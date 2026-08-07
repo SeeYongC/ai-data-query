@@ -98,7 +98,24 @@
 
 ## 🚀 快速开始
 
-### 环境要求
+### 使用 Docker 运行(推荐)
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/SeeYongC/ai-data-query.git
+cd ai-data-query
+
+# 2. 配置 API Key(二选一),写入 .env 文件
+echo "DEEPSEEK_API_KEY=sk-your-api-key" > .env
+# 或:echo "OPENAI_API_KEY=sk-your-api-key" > .env
+
+# 3. 构建并启动
+docker compose up -d --build
+```
+
+启动后浏览器访问 **http://localhost:8000**。SQLite 数据库通过 volume 持久化,重启容器数据不丢失。
+
+### 环境要求(本地开发)
 
 - Python 3.10+
 - DeepSeek 或 OpenAI 的 API Key([申请地址](https://platform.deepseek.com/))
@@ -367,13 +384,15 @@ POST /api/query
 
 ## 🗺️ 路线图
 
-| 阶段 | 目标 |
-|---|---|
-| v0.4 | 会话记忆:Agent 记住上下文,支持追问 |
-| v0.5 | 多步推理:复杂分析问题自动拆解为多步 SQL |
-| v0.6 | 数据质量监控:自动发现空值突增、环比突变 |
-| v0.7 | 用户认证与多租户 |
-| v1.0 | Docker 部署 + SaaS 化 |
+| 阶段 | 目标 | 状态 |
+|---|---|---|
+| v0.4 | 会话记忆:Agent 记住上下文,支持追问 | ✅ 已完成 |
+| v0.5 | 多步推理:复杂分析问题自动拆解为多步 SQL | 待做 |
+| v0.6 | 数据质量监控:自动发现空值突增、环比突变 | 待做 |
+| v0.7 | 用户认证与多租户 | 待做 |
+| v0.8 | 前端框架化:迁移至 Vue / React 等组件化框架,引入 Vite 等构建流程,替代零框架单文件前端 | 待做 |
+| v1.0 | Docker 部署 | ✅ 已完成 |
+| v1.1 | SaaS 化 | 待做 |
 
 ---
 
